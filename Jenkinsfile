@@ -87,5 +87,34 @@ pipeline {
                 }
             }
         }
+
+        stage('Connect to AKS') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'azure-jenkins-sp',
+                        usernameVariable: 'AZURE_CLIENT_ID',
+                        passwordVariable: 'AZURE_CLIENT_SECRET'
+                    )
+                ]) {
+                    sh '''
+                        az login \
+                            --service-principal \
+                            --username "$AZURE_CLIENT_ID" \
+                            --password "$AZURE_CLIENT_SECRET" \
+                            --tenant "f8881560-4bc8-45bf-aab7-61915f660abb"
+
+                        az aks get-credentials \
+                            --resource-group rizwan \
+                            --name demo-aks1 \
+                            --overwrite-existing
+
+                        kubectl get nodes
+                    '''
+                }
+            }
+        }
     }
 }
+
+
