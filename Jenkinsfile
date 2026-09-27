@@ -32,5 +32,11 @@ pipeline {
                 sh './mvnw test'
             }
         }
+
+        stage('Docker Build') {
+            steps {
+                sh 'docker build -t devops-cicd-demo:${BUILD_NUMBER} .'
+            }
+        }
     }
 }
