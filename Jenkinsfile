@@ -4,7 +4,12 @@ pipeline {
     environment {
         JAVA_HOME = '/usr/lib/jvm/java-17-openjdk-amd64'
         PATH = "${JAVA_HOME}/bin:${env.PATH}"
+
         DOCKER_IMAGE = 'rizwangourysk/devops-cicd-demo'
+
+        AZURE_TENANT_ID = 'f8881560-4bc8-45bf-aab7-61915f660abb'
+        AZURE_RESOURCE_GROUP = 'rizwan'
+        AKS_CLUSTER_NAME = 'demo-aks1'
     }
 
     stages {
@@ -36,7 +41,11 @@ pipeline {
 
         stage('Docker Build') {
             steps {
-                sh 'docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .'
+                sh '''
+                    docker build \
+                        -t ${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                        .
+                '''
             }
         }
 
@@ -60,7 +69,9 @@ pipeline {
 
         stage('Docker Push') {
             steps {
-                sh 'docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}'
+                sh '''
+                    docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                '''
             }
         }
 
@@ -78,7 +89,7 @@ pipeline {
                             --service-principal \
                             --username "$AZURE_CLIENT_ID" \
                             --password "$AZURE_CLIENT_SECRET" \
-                            --tenant "f8881560-4bc8-45bf-aab7-61915f660abb"
+                            --tenant "$AZURE_TENANT_ID"
 
                         az account show \
                             --query "{subscription:name, user:user.name}" \
@@ -102,11 +113,11 @@ pipeline {
                             --service-principal \
                             --username "$AZURE_CLIENT_ID" \
                             --password "$AZURE_CLIENT_SECRET" \
-                            --tenant "f8881560-4bc8-45bf-aab7-61915f660abb"
+                            --tenant "$AZURE_TENANT_ID"
 
                         az aks get-credentials \
-                            --resource-group rizwan \
-                            --name demo-aks1 \
+                            --resource-group "$AZURE_RESOURCE_GROUP" \
+                            --name "$AKS_CLUSTER_NAME" \
                             --overwrite-existing
 
                         kubectl get nodes
@@ -114,7 +125,51 @@ pipeline {
                 }
             }
         }
+
+        stage('Deploy to AKS') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'azure-jenkins-sp',
+                        usernameVariable: 'AZURE_CLIENT_ID',
+                        passwordVariable: 'AZURE_CLIENT_SECRET'
+                    )
+                ]) {
+                    sh '''
+                        az login \
+                            --service-principal \
+                            --username "$AZURE_CLIENT_ID" \
+                            --password "$AZURE_CLIENT_SECRET" \
+                            --tenant "$AZURE_TENANT_ID"
+
+                        az aks get-credentials \
+                            --resource-group "$AZURE_RESOURCE_GROUP" \
+                            --name "$AKS_CLUSTER_NAME" \
+                            --overwrite-existing
+
+                        kubectl set image deployment/devops-cicd-demo \
+                            devops-cicd-demo=${DOCKER_IMAGE}:${BUILD_NUMBER}
+
+                        kubectl rollout status deployment/devops-cicd-demo
+
+                        kubectl get pods
+
+                        kubectl get svc devops-cicd-demo
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'CI/CD Pipeline completed successfully!'
+            echo "Docker Image: ${DOCKER_IMAGE}:${BUILD_NUMBER}"
+        }
+
+        failure {
+            echo 'CI/CD Pipeline failed. Check the failed stage in the Jenkins console.'
+        }
     }
 }
-
 
