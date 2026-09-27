@@ -1,3 +1,4 @@
+```groovy
 pipeline {
     agent any
 
@@ -50,7 +51,9 @@ pipeline {
                     )
                 ]) {
                     sh '''
-                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                        echo "$DOCKER_PASSWORD" | docker login \
+                            -u "$DOCKER_USERNAME" \
+                            --password-stdin
                     '''
                 }
             }
@@ -61,5 +64,31 @@ pipeline {
                 sh 'docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}'
             }
         }
+
+        stage('Azure Login') {
+            steps {
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'azure-jenkins-sp',
+                        usernameVariable: 'AZURE_CLIENT_ID',
+                        passwordVariable: 'AZURE_CLIENT_SECRET'
+                    )
+                ]) {
+                    sh '''
+                        az login \
+                            --service-principal \
+                            --username "$AZURE_CLIENT_ID" \
+                            --password "$AZURE_CLIENT_SECRET" \
+                            --tenant "f8881560-4bc8-45bf-aab7-61915f660abb"
+
+                        az account show \
+                            --query "{subscription:name, user:user.name}" \
+                            -o table
+                    '''
+                }
+            }
+        }
     }
 }
+```
+
